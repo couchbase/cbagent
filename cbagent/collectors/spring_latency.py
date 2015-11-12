@@ -2,8 +2,8 @@ import json
 from time import time
 from logger import logger
 
-from spring.docgen import (ExistingKey, NewDocument, NewNestedDocument,
-                           ReverseLookupDocument)
+from spring.docgen import (ExistingKey, NewKey, KeyForRemoval, NewDocument, 
+                           NewNestedDocument, ReverseLookupDocument)
 from spring.querygen import (ViewQueryGen, ViewQueryGenByType, N1QLQueryGen,
                              SpatialQueryFromFile)
 from spring.cbgen import CBGen, SpatialGen, N1QLGen
@@ -28,6 +28,9 @@ class SpringLatency(Latency):
         self.existing_keys = ExistingKey(workload.working_set,
                                          workload.working_set_access,
                                          prefix=prefix)
+        self.new_keys = NewKey(prefix=prefix, expiration=workload.expiration)
+        self.keys_for_removal = KeyForRemoval(prefix=prefix)
+
         if not hasattr(workload, 'doc_gen') or workload.doc_gen == 'old':
             self.new_docs = NewDocument(workload.size)
         elif workload.doc_gen == 'new':
@@ -36,6 +39,7 @@ class SpringLatency(Latency):
             self.new_docs = ReverseLookupDocument(workload.size,
                                                   workload.doc_partitions)
         self.items = workload.items
+        self.n1ql_op = workload.n1ql_op
 
     def measure(self, client, metric, bucket):
         key = self.existing_keys.next(curr_items=self.items, curr_deletes=0)
@@ -136,6 +140,10 @@ class SpringN1QLQueryLatency(SpringLatency):
     def __init__(self, settings, workload, prefix=None):
         super(SpringN1QLQueryLatency, self).__init__(settings, workload, prefix)
         self.clients = []
+        self.kvclients = []
+        self.curr_items = self.items
+        self.smallcappedinit = False
+        self.cappedcounter = 0
         queries = settings.new_n1ql_queries
         if queries:
             logger.info("CBAgent will collect latencies for these queries:")
@@ -144,12 +152,88 @@ class SpringN1QLQueryLatency(SpringLatency):
                 client = N1QLGen(bucket=bucket, host=settings.master_node,
                                  username=bucket,
                                  password=settings.bucket_password)
-                self.clients.append((bucket, client))
-
+                kvclient = CBGen(bucket=bucket, host=settings.master_node,
+                           username=bucket, password=settings.bucket_password)
+                self.clients.append((bucket, client, kvclient))
             self.new_queries = N1QLQueryGen(queries)
 
-    def measure(self, client, metric, bucket):
-        key = self.existing_keys.next(curr_items=self.items, curr_deletes=0)
+    def measure(self, client, kvclient, metric, bucket):
+	if self.n1ql_op == 'create':
+            self.curr_items += 1
+            key, ttl = self.new_keys.next(curr_items=self.curr_items)
+            key = "stat" + key[5:]
+
+        elif self.n1ql_op == 'delete' or self.n1ql_op == 'update':
+            self.curr_items += 1
+            key, ttl = self.new_keys.next(curr_items=self.curr_items)
+            key = "stat" + key[5:]
+            doc = self.new_docs.next(key)
+            doc['key'] = key
+            doc['bucket'] = bucket
+            kvclient.create(key, doc)
+            ddoc_name, view_name, query = self.new_queries.next(doc)
+            _, latency = client.query(ddoc_name, view_name, query=query)
+            return 1000 * latency  # s -> ms
+
+        elif self.n1ql_op == 'rangeupdate':
+            if self.smallcappedinit == False:
+                logger.info("Initiating load for rangeupdate latency collection")
+                for i in range(100):
+                    key, ttl = self.new_keys.next(curr_items=self.curr_items)
+                    key = "stat" + key[5:]
+                    doc = self.new_docs.next(key)
+                    doc['key'] = key
+                    doc['bucket'] = bucket
+                    doc['capped_small'] = "stat"
+                    kvclient.create(key, doc)
+                    self.curr_items += 1
+                self.smallcappedinit = True
+                logger.info("Completed load for rangeupdate latency collection")
+                return 0
+            key, ttl = self.new_keys.next(curr_items=self.curr_items)
+            key = "stat" + key[5:]
+            doc = self.new_docs.next(key)
+            doc['capped_small'] = "stat"
+            ddoc_name, view_name, query = self.new_queries.next(doc)
+            query['statement'] = "UPDATE `bucket-1` SET name = name||'' WHERE capped_small=$1;"
+            del query['prepared']
+            _, latency = client.query(ddoc_name, view_name, query=query)
+            return 1000 * latency  # s -> ms
+
+        elif self.n1ql_op == 'rangedelete':
+            if self.smallcappedinit == False:
+                logger.info("Initiating load for range update latency collection")
+                for i in range(10000):
+                    key, ttl = self.new_keys.next(curr_items=self.curr_items)
+                    key = "stat" + key[5:]
+                    doc = self.new_docs.next(key)
+                    doc['key'] = key
+                    doc['bucket'] = bucket
+                    doc['capped_small'] = "stat" +  str(i/100)
+                    kvclient.create(key, doc)
+                    self.curr_items += 1
+                self.smallcappedinit = True
+                logger.info("Completed load for range delete latency collection")
+                return 0
+            key, ttl = self.new_keys.next(curr_items=self.curr_items)
+            key = "stat" + key[5:]
+            doc = self.new_docs.next(key)
+            doc['capped_small'] = "stat" + str(self.cappedcounter)
+            ddoc_name, view_name, query = self.new_queries.next(doc)
+            _, latency = client.query(ddoc_name, view_name, query=query)
+            self.cappedcounter += 1
+            return 1000 * latency  # s -> ms
+
+        elif self.n1ql_op == 'merge':
+             doc = {}
+             ddoc_name, view_name, query = self.new_queries.next(doc)
+             _, latency = client.query(ddoc_name, view_name, query=query)
+             flushpath = '/pools/default/buckets/bucket-2/controller/doFlush'
+             self.post_http(path = flushpath)
+             return latency  # s -> ms
+
+        else:              
+            key = self.existing_keys.next(curr_items=self.items, curr_deletes=0)
         doc = self.new_docs.next(key)
         doc['key'] = key
         doc['bucket'] = bucket
@@ -157,3 +241,11 @@ class SpringN1QLQueryLatency(SpringLatency):
 
         _, latency = client.query(ddoc_name, view_name, query=query)
         return 1000 * latency  # s -> ms
+
+    def sample(self):
+        for bucket, client, kvclient in self.clients:
+            samples = {}
+            for metric in self.METRICS:
+                samples[metric] = self.measure(client, kvclient, metric, bucket)
+            self.store.append(samples, cluster=self.cluster,
+                              bucket=bucket, collector=self.COLLECTOR)

@@ -51,6 +51,20 @@ class Collector(object):
             logger.warn("Connection error: {}".format(url))
             return self.retry(path, server, port)
 
+    def post_http(self, path, server=None, port=8091):
+        server = server or self.master_node
+        url = "http://{}:{}{}".format(server, port, path)
+        try:
+            r = self.session.post(url=url, auth=self.auth)
+            if r.status_code in (200, 201, 202):
+                return r.json()
+            else:
+                logger.warn("Bad response: {}".format(url))
+                return self.retry(path, server, port)
+        except requests.ConnectionError:
+            logger.warn("Connection error: {}".format(url))
+            return self.retry(path, server, port)
+
     def retry(self, path, server=None, port=8091):
         time.sleep(self.interval)
         for node in self.nodes:
