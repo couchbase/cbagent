@@ -14,6 +14,10 @@ class PS(Collector):
         self.nodes = settings.hostnames or list(self.get_nodes())
         if hasattr(settings, "sync_gateway_nodes") and settings.sync_gateway_nodes:
             self.nodes += settings.sync_gateway_nodes
+        if hasattr(settings, "monitor_clients") and settings.monitor_clients\
+                and settings.master_node in settings.monitor_clients:
+            self.nodes = settings.monitor_clients
+            self.KNOWN_PROCESSES = ("python", )
         self.ps = PSStats(hosts=self.nodes,
                           user=self.ssh_username,
                           password=self.ssh_password)
