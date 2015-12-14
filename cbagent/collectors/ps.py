@@ -17,7 +17,7 @@ class PS(Collector):
         if hasattr(settings, "monitor_clients") and settings.monitor_clients\
                 and settings.master_node in settings.monitor_clients:
             self.nodes = settings.monitor_clients
-            self.KNOWN_PROCESSES = ("python", )
+            self.KNOWN_PROCESSES = ("backup", "cbbackupwrapper", )
         self.ps = PSStats(hosts=self.nodes,
                           user=self.ssh_username,
                           password=self.ssh_password)
