@@ -6,7 +6,7 @@ from spring.docgen import (ExistingKey, NewKey, KeyForRemoval, NewDocument,
                            NewNestedDocument, ReverseLookupDocument)
 from spring.querygen import (ViewQueryGen, ViewQueryGenByType, N1QLQueryGen,
                              SpatialQueryFromFile)
-from spring.cbgen import CBGen, SpatialGen, N1QLGen
+from spring.cbgen import CBGen, SpatialGen, N1QLGen, SubDocGen
 
 from cbagent.collectors import Latency
 
@@ -61,6 +61,35 @@ class SpringLatency(Latency):
                 samples[metric] = self.measure(client, metric, bucket)
             self.store.append(samples, cluster=self.cluster,
                               bucket=bucket, collector=self.COLLECTOR)
+
+
+class SpringSubdocLatency(SpringLatency):
+
+    METRICS = ("latency_set", "latency_get")
+    COLLECTOR = "spring_subdoc_latency"
+
+    def __init__(self, settings, workload, prefix=None):
+        super(SpringSubdocLatency, self).__init__(settings, workload, prefix)
+        self.clients = []
+        self.ws = workload
+        for bucket in self.get_buckets():
+            client = SubDocGen(bucket=bucket, host=settings.master_node,
+                           username=bucket, password=settings.bucket_password)
+            self.clients.append((bucket, client))
+
+    def measure(self, client, metric, bucket):
+        key = self.existing_keys.next(curr_items=self.items, curr_deletes=0)
+
+        t0 = time()
+        if metric == "latency_set":
+            client.update(key, self.ws.subdoc_fields, self.ws.size)
+        elif metric == "latency_get":
+            client.read(key, self.ws.subdoc_fields)
+        if metric == "latency_remove":
+            client.delete(key, self.ws.subdoc_delete_fields)
+        elif metric == "latency_counter":
+            client.counter(key, self.ws.subdoc_counter_fields)
+        return 1000 * (time() - t0)  # Latency in ms
 
 
 class SpringCasLatency(SpringLatency):
