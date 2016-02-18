@@ -3,7 +3,8 @@ from time import time
 from logger import logger
 
 from spring.docgen import (ExistingKey, NewKey, KeyForRemoval, NewDocument, 
-                           NewNestedDocument, ReverseLookupDocument)
+                           NewNestedDocument, ReverseLookupDocument,
+                           ReverseLookupDocumentArrayIndexing)
 from spring.querygen import (ViewQueryGen, ViewQueryGenByType, N1QLQueryGen,
                              SpatialQueryFromFile)
 from spring.cbgen import CBGen, SpatialGen, N1QLGen
@@ -38,6 +39,9 @@ class SpringLatency(Latency):
         elif workload.doc_gen == 'reverse_lookup':
             self.new_docs = ReverseLookupDocument(workload.size,
                                                   workload.doc_partitions)
+        elif workload.doc_gen == 'reverse_lookup_array_indexing':
+            self.new_docs = ReverseLookupDocumentArrayIndexing(
+                workload.size, workload.doc_partitions, workload.items)
         self.items = workload.items
         self.n1ql_op = workload.n1ql_op
 
