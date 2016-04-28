@@ -17,3 +17,5 @@ from spring_latency import (SpringLatency, SpringQueryLatency,
                             SpringN1QLQueryLatency)
 from sync_gateway import SyncGateway
 from xdcr_lag import XdcrLag
+from fts_stats import (FtsCollector, FtsLatency, ElasticStats,
+                         FtsStats, FtsQueryStats)
