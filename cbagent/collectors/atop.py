@@ -10,7 +10,7 @@ class Atop(Collector):
                "cbq-engine_rss", "beam.smp_vsize", "memcached_vsize",
                "indexer_vsize", "projector_vsize", "beam.smp_cpu",
                "memcached_cpu", "indexer_cpu", "projector_cpu", "cbq-engine_cpu",
-               "goxdcr_cpu", "goxdcr_rss")
+               "goxdcr_cpu", "goxdcr_rss", "cbft_vsize", "cbft_rss", "cbft_cpu",)
 
     def __init__(self, settings):
         super(Atop, self).__init__(settings)
