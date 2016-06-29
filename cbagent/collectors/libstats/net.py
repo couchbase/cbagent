@@ -13,11 +13,14 @@ class NetStat(RemoteStats):
 
     @single_node_task
     def detect_iface(self):
-        for iface in ("eth5", "eth0", "em1"):
-            result = self.run("grep {} /proc/net/dev".format(iface),
-                              warn_only=True, quiet=True)
-            if not result.return_code:
-                return iface
+        """Examples of output:
+
+            default via 172.23.100.1 dev enp5s0f0 onlink
+            default via 172.23.96.1 dev enp6s0  proto static  metric 1024
+            default via 172.23.100.1 dev em1  proto static
+        """
+        stdout = self.run("ip route list | grep default")
+        return stdout.strip().split()[4]
 
     def get_dev_stats(self):
         cmd = "grep {} /proc/net/dev".format(self.iface)
