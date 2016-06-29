@@ -18,6 +18,8 @@ class PS(Collector):
                 and settings.master_node in settings.monitor_clients:
             self.nodes = settings.monitor_clients
             self.KNOWN_PROCESSES = ("backup", "cbbackupwrapper", )
+        if hasattr(settings, "fts_server"):
+            self.KNOWN_PROCESSES = ("beam.smp", "memcached", "cbft",)
         self.ps = PSStats(hosts=self.nodes,
                           user=self.ssh_username,
                           password=self.ssh_password)
