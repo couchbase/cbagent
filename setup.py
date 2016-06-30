@@ -20,7 +20,7 @@ setup(
     },
     include_package_data=True,
     install_requires=[
-        'couchbase==1.2.1',
+        'couchbase==2.1.0',
         'decorator',
         'fabric==1.8.0',
         'logger',

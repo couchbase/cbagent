@@ -1,4 +1,4 @@
-couchbase==1.2.1
+couchbase==2.1.0
 coverage
 decorator
 fabric==1.8.0
