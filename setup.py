@@ -24,7 +24,7 @@ setup(
         'decorator',
         'fabric==1.8.0',
         'logger',
-        'requests==2.1.0',
+        'requests==2.31.0',
         'seriesly',
         'spring'
     ],
